@@ -212,7 +212,8 @@ function render(){
   } else {
     tx.className = "text"+(p.title?" title":"")+(textOn?"":" off");
     const hint = page===0 ? "ゆびで ひだりへ めくってね" : "";
-    tx.innerHTML = `<p>${p.text}</p>${hint?`<span class="hint">${hint}</span>`:""}`;
+    // the cover picture already carries the title, so its card only shows the hint
+    tx.innerHTML = (page===0?"":`<p>${p.text}</p>`)+(hint?`<span class="hint">${hint}</span>`:"");
   }
   $("dots").innerHTML = PAGES.map((_,i)=>`<span class="dot${i===page?" on":""}"></span>`).join("");
   $("back").disabled = page===0 && !ended;
