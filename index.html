@@ -11,7 +11,7 @@ body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
 </style>
-<title>おねえちゃんと いっしょ</title>
+<title>おはなしの ほんだな</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@500&family=Zen+Maru+Gothic:wght@500;700&display=swap">
 <style>
@@ -79,6 +79,17 @@ button{font:inherit;color:inherit}
 @media (prefers-reduced-motion:reduce){.fade{animation:none}.dot,.text{transition:none}}
 
 .end{display:flex;justify-content:center}
+
+/* bookshelf: pick a story */
+.shelf{position:fixed;inset:0;z-index:4;overflow:auto;background:var(--paper);-webkit-overflow-scrolling:touch}
+.shelfin{max-width:620px;margin:0 auto;padding:22px 16px calc(28px + env(safe-area-inset-bottom,0px))}
+.shelfin h1{font-family:var(--display);font-size:clamp(1.35rem,5.8vw,1.8rem);color:var(--tomato);text-align:center;margin:6px 0 20px;line-height:1.4}
+.books{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:18px}
+.book{border:none;background:none;padding:0;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:8px;font:inherit;color:inherit}
+.book img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:14px;box-shadow:0 3px 10px var(--shade);display:block;background:var(--solid)}
+.book b{font-family:var(--display);font-size:1.05rem;line-height:1.4}
+.book small{color:var(--soft);font-size:.82rem;line-height:1.5}
+.book:focus-visible img{outline:3px solid var(--leaf);outline-offset:3px}
 .big{border:none;border-radius:999px;padding:12px 22px;font-family:var(--display);font-size:1.15rem;cursor:pointer;background:var(--tomato);color:#fff;box-shadow:0 3px 8px var(--shade)}
 .big.sub{background:var(--solid);color:var(--ink)}
 
@@ -97,7 +108,14 @@ button{font:inherit;color:inherit}
 </style>
 </head>
 <body>
-<div class="app">
+<div class="shelf" id="shelf">
+  <div class="shelfin">
+    <h1>どの おはなしを よむ？</h1>
+    <div class="books" id="books"></div>
+  </div>
+</div>
+
+<div class="app" id="app" hidden>
   <div class="stage" id="stage" tabindex="0" aria-live="polite">
     <div class="page" id="pg">
       <div class="frame" id="frame"></div>
@@ -116,7 +134,7 @@ button{font:inherit;color:inherit}
 <div class="sheet" id="sheet" hidden>
   <div class="panel">
     <h2>えを かえる</h2>
-    <p>えは さいしょから はいっています。べつの えに かえたい ときは わくを タップ。<br>「まとめて えらぶ」は ファイルめいの じゅんばん（0=ひょうし、1〜6）に ならびます。「もとに もどす」で さいしょの えに もどります。</p>
+    <p>えは さいしょから はいっています。べつの えに かえたい ときは わくを タップ。<br>「まとめて えらぶ」は ファイルめいの じゅんばん（0=ひょうし、1、2…）に ならびます。「もとに もどす」で さいしょの えに もどります。</p>
     <div class="slots" id="slots"></div>
     <div class="row">
       <button class="big" id="pickAll">まとめて えらぶ</button>
@@ -135,27 +153,11 @@ button{font:inherit;color:inherit}
   </div>
 </div>
 
+<script src="works.js"></script>
 <script>
-const PAGES = [
-  {title:true, text:"おねえちゃんと いっしょ", say:"おねえちゃんと、いっしょ。", note:"ひょうし"},
-  {text:"すみれちゃんは トマトが だいきらい。「ぐにゅっと するから いや！」と、いつも のこして しまいます。",
-   say:"すみれちゃんは、トマトが、だいきらい。ぐにゅっと するから、いや！と、いつも のこして しまいます。", note:"すみれが トマトを よけている"},
-  {text:"じつは、おねえちゃんの かれんちゃんも トマトが にがて。ふたりの おさらには、トマトが ぽつんと のこって います。",
-   say:"じつは、おねえちゃんの かれんちゃんも、トマトが にがて。ふたりの おさらには、トマトが ぽつんと、のこって います。", note:"ふたりとも こまった かお"},
-  {text:"かれんは かんがえました。「おねえちゃんが がんばったら、すみれも がんばれるかも」。「すみれ、いっしょに たべてみよう！」",
-   say:"かれんは、かんがえました。おねえちゃんが がんばったら、すみれも、がんばれるかも。すみれ、いっしょに、たべてみよう！", note:"かれんが さそう"},
-  {text:"すみれは かれんの かおを 見ました。おねえちゃんも こわいのに、がんばろうと している。「うん、すみれも がんばる！」",
-   say:"すみれは、かれんの かおを みました。おねえちゃんも こわいのに、がんばろうと している。うん、すみれも、がんばる！", note:"すみれが けっしん"},
-  {text:"ふたりで 手を つないで、「せーの！」 目を つぶって、ぱくっ。「……あれ？ おいしい！」",
-   say:"ふたりで、てを つないで、せーの！　めを つぶって、ぱくっ。……あれ？　おいしい！", note:"ふたりで ぱくっ"},
-  {text:"「ふたりとも、よく がんばったね」。おかあさんに ほめられて、ふたりは にっこり。いっしょなら、こわくないね。",
-   say:"ふたりとも、よく がんばったね。おかあさんに ほめられて、ふたりは にっこり。いっしょなら、こわくないね。", note:"おかあさんに ほめられる"}
-];
-
-// pictures shipped with the app
-const BUILTIN = ["img/0.jpg","img/1.jpg","img/2.jpg","img/3.jpg","img/4.jpg","img/5.jpg","img/6.jpg"];
-BUILTIN.forEach(s=>{ const i=new Image(); i.src=s; });
 const $ = id => document.getElementById(id);
+// the story being read now; the shelf is shown while it is null
+let work = null, PAGES = [], BUILTIN = [];
 let page = 0, soundOn = true, textOn = true, rate = 0.85, urls = [], ended = false;
 
 /* ---- storage (optional; the page works without it) ---- */
@@ -165,10 +167,12 @@ function openDB(){ return new Promise(res=>{ try{
   r.onupgradeneeded = ()=> r.result.createObjectStore("img");
   r.onsuccess = ()=> res(r.result); r.onerror = ()=> res(null);
 }catch(e){res(null)} }); }
-function dbPut(k,v){ try{ if(!db) return; const t=db.transaction("img","readwrite"); v?t.objectStore("img").put(v,k):t.objectStore("img").delete(k);}catch(e){} }
+// keys are "<work id>:<page>" so each story keeps its own replaced pictures
+const dbKey = i => work.id+":"+i;
+function dbPut(k,v){ try{ if(!db) return; const t=db.transaction("img","readwrite"); v?t.objectStore("img").put(v,dbKey(k)):t.objectStore("img").delete(dbKey(k));}catch(e){} }
 function dbGetAll(){ return new Promise(res=>{ try{ if(!db) return res();
   const s=db.transaction("img","readonly").objectStore("img"); let n=0;
-  PAGES.forEach((_,i)=>{ const q=s.get(i); q.onsuccess=()=>{ if(q.result) setImg(i,q.result,false); if(++n===PAGES.length) res(); }; q.onerror=()=>{ if(++n===PAGES.length) res(); }; });
+  PAGES.forEach((_,i)=>{ const q=s.get(dbKey(i)); q.onsuccess=()=>{ if(q.result) setImg(i,q.result,false); if(++n===PAGES.length) res(); }; q.onerror=()=>{ if(++n===PAGES.length) res(); }; });
 }catch(e){res()} }); }
 function setImg(i,blob,save=true){
   if(urls[i]) URL.revokeObjectURL(urls[i]);
@@ -189,6 +193,38 @@ function speak(t, force){
   if(!synth) return; synth.cancel(); if(!soundOn && !force) return;
   const u = new SpeechSynthesisUtterance(t); u.lang="ja-JP"; u.rate=rate; u.pitch=1.1; if(voice) u.voice=voice;
   synth.speak(u);
+}
+
+/* ---- bookshelf ---- */
+function renderShelf(){
+  $("books").innerHTML = WORKS.map(w=>
+    `<button class="book" data-id="${w.id}"><img src="works/${w.id}/img/0.jpg" alt="" draggable="false"><b>${w.title}</b><small>${w.lead||""}</small></button>`).join("");
+  $("books").querySelectorAll(".book").forEach(b=> b.onclick=()=> openWork(b.dataset.id));
+}
+function openWork(id){
+  const w = WORKS.find(x=>x.id===id);
+  if(!w){ closeWork(); return; }
+  urls.forEach(u=> u && URL.revokeObjectURL(u));
+  work=w; PAGES=w.pages; urls=[]; page=0; ended=false;
+  BUILTIN = PAGES.map((_,i)=>`works/${w.id}/img/${i}.jpg`);
+  BUILTIN.forEach(src=>{ const im=new Image(); im.src=src; });
+  document.title = w.title;
+  $("shelf").hidden=true; $("app").hidden=false;
+  render();
+  if(db) dbGetAll().then(render);
+  if(decodeURIComponent(location.hash.slice(1))!==id) location.hash = id;
+}
+function closeWork(){
+  if(synth) synth.cancel();
+  work=null; PAGES=[]; BUILTIN=[];
+  document.title = "おはなしの ほんだな";
+  $("app").hidden=true; $("shelf").hidden=false;
+  if(location.hash && location.hash!=="#") location.hash="";
+}
+function route(){
+  const id = decodeURIComponent(location.hash.slice(1));
+  if(id && WORKS.some(w=>w.id===id)){ if(!work || work.id!==id) openWork(id); }
+  else if(work) closeWork();
 }
 
 /* ---- render ---- */
@@ -216,13 +252,16 @@ function render(){
     tx.innerHTML = (page===0?"":`<p>${p.text}</p>`)+(hint?`<span class="hint">${hint}</span>`:"");
   }
   $("dots").innerHTML = PAGES.map((_,i)=>`<span class="dot${i===page?" on":""}"></span>`).join("");
-  $("back").disabled = page===0 && !ended;
+  const toShelf = page===0 && !ended;
+  $("back").disabled = false;
+  $("back").setAttribute("aria-label", toShelf?"ほんだなへ もどる":"まえの ページ");
   $("textBtn").setAttribute("aria-pressed", textOn);
   $("sound").setAttribute("aria-pressed", soundOn);
 }
 /* ---- page turning by swipe ---- */
 const pg = $("pg"), stage = $("stage");
-const LAST = PAGES.length-1;
+// the last page depends on the story being read, so work it out each time
+const last = ()=> PAGES.length-1;
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let sx=0, dx=0, dragging=false, busy=false;
 const canNext = ()=> !ended;
@@ -230,7 +269,7 @@ const canPrev = ()=> ended || page>0;
 
 function applyTurn(dir){
   // change state and start the voice right away (inside the finger gesture)
-  if(dir>0){ if(page<LAST){ page++; speak(PAGES[page].say); } else { ended=true; speak("おしまい。"); } }
+  if(dir>0){ if(page<last()){ page++; speak(PAGES[page].say); } else { ended=true; speak("おしまい。"); } }
   else { if(ended){ ended=false; speak(PAGES[page].say); } else { page--; speak(PAGES[page].say); } }
 }
 function turn(dir){
@@ -273,7 +312,7 @@ function endDrag(){
 stage.addEventListener("pointerup", endDrag);
 stage.addEventListener("pointercancel", endDrag);
 stage.addEventListener("keydown", e=>{ if(e.key==="ArrowRight"||e.key===" "||e.key==="Enter"){ e.preventDefault(); turn(1); } if(e.key==="ArrowLeft") turn(-1); });
-$("back").onclick = ()=> turn(-1);
+$("back").onclick = ()=>{ if(page===0 && !ended) closeWork(); else turn(-1); };
 
 function soundIcon(){ $("soundIcon").innerHTML = soundOn
   ? '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/>'
@@ -305,8 +344,10 @@ $("clearAll").onclick = ()=>{ PAGES.forEach((_,i)=>setImg(i,null)); renderSlots(
 $("rate").oninput = e=>{ rate=+e.target.value; try{localStorage.setItem("ks-rate",rate)}catch(err){} };
 $("testVoice").onclick = ()=> speak("すみれちゃんは、トマトが、だいきらい。", true);
 
-soundIcon(); render();
-openDB().then(d=>{ db=d; return dbGetAll(); }).then(render);
+soundIcon(); renderShelf();
+openDB().then(d=>{ db=d; if(work) return dbGetAll().then(render); });
+addEventListener("hashchange", route);
+route();
 </script>
 </body>
 </html>
