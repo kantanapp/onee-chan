@@ -59,10 +59,10 @@ button{font:inherit;color:inherit}
 /* top controls float over the picture */
 .bar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:10px 16px;z-index:2;pointer-events:none}
 .bar > *{pointer-events:auto}
-.bar .grow{flex:1;display:flex;justify-content:center;gap:6px;pointer-events:none}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--chip);box-shadow:0 1px 3px var(--shade);transition:background .3s,transform .3s}
+.bar .grow{flex:1;min-width:0;display:flex;justify-content:center;align-items:center;gap:clamp(4px,1.3vw,6px);overflow:hidden;pointer-events:none}
+.dot{width:clamp(7px,2vw,9px);height:clamp(7px,2vw,9px);flex:none;border-radius:50%;background:var(--chip);box-shadow:0 1px 3px var(--shade);transition:background .3s,transform .3s}
 .dot.on{background:var(--tomato);transform:scale(1.25)}
-.icon{width:42px;height:42px;border-radius:50%;border:none;background:var(--chip);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 2px 6px var(--shade);display:grid;place-items:center;cursor:pointer}
+.icon{width:clamp(37px,10.5vw,42px);height:clamp(37px,10.5vw,42px);flex:none;border-radius:50%;border:none;background:var(--chip);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 2px 6px var(--shade);display:grid;place-items:center;cursor:pointer}
 .icon svg{width:21px;height:21px;stroke:var(--ink);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .icon[aria-pressed="false"] svg{opacity:.45}
 .icon:disabled{opacity:.3}
@@ -126,7 +126,8 @@ button{font:inherit;color:inherit}
     </div>
   </div>
   <div class="bar">
-    <button class="icon" id="back" aria-label="まえのページ"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="icon" id="back" aria-label="まえの ページ"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="icon" id="home" aria-label="ほんだなへ もどる"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg></button>
     <div class="grow" id="dots"></div>
     <button class="icon" id="textBtn" aria-label="もじを だす・かくす" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M5 6h14M12 6v13M8 19h8"/></svg></button>
     <button class="icon" id="sound" aria-label="よみあげ オン・オフ" aria-pressed="true"><svg viewBox="0 0 24 24" id="soundIcon"></svg></button>
@@ -256,9 +257,7 @@ function render(){
     tx.innerHTML = (page===0?"":`<p>${p.text}</p>`)+(hint?`<span class="hint">${hint}</span>`:"");
   }
   $("dots").innerHTML = PAGES.map((_,i)=>`<span class="dot${i===page?" on":""}"></span>`).join("");
-  const toShelf = page===0 && !ended;
-  $("back").disabled = false;
-  $("back").setAttribute("aria-label", toShelf?"ほんだなへ もどる":"まえの ページ");
+  $("back").disabled = page===0 && !ended;
   $("textBtn").setAttribute("aria-pressed", textOn);
   $("sound").setAttribute("aria-pressed", soundOn);
 }
@@ -316,7 +315,8 @@ function endDrag(){
 stage.addEventListener("pointerup", endDrag);
 stage.addEventListener("pointercancel", endDrag);
 stage.addEventListener("keydown", e=>{ if(e.key==="ArrowRight"||e.key===" "||e.key==="Enter"){ e.preventDefault(); turn(1); } if(e.key==="ArrowLeft") turn(-1); });
-$("back").onclick = ()=>{ if(page===0 && !ended) closeWork(); else turn(-1); };
+$("back").onclick = ()=> turn(-1);
+$("home").onclick = ()=> closeWork();
 
 function soundIcon(){ $("soundIcon").innerHTML = soundOn
   ? '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/>'
