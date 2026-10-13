@@ -70,7 +70,8 @@ button{font:inherit;color:inherit}
 
 /* story text card at the bottom */
 .text{position:absolute;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:2;background:var(--textcard);color:var(--textink);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:20px;padding:14px 18px;box-shadow:0 4px 16px var(--shade);font-size:clamp(1.15rem,5vw,1.5rem);line-height:1.7;letter-spacing:.02em;transition:opacity .3s,transform .3s}
-.text p{margin:0;text-wrap:pretty}
+/* lines reach both edges of the card; kinsoku keeps small kana off the start of a line */
+.text p{margin:0;text-align:justify;line-break:strict;text-wrap:pretty;overflow-wrap:break-word}
 /* story cards are all the same height (4 lines) so the box does not jump while turning pages */
 .text:not(.title){min-height:calc(6.8em + 28px);display:flex;flex-direction:column;justify-content:center}
 .text.title{text-align:center;font-family:var(--display);font-size:clamp(1.6rem,7.5vw,2.2rem);color:var(--texttitle);line-height:1.4}
