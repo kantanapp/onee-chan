@@ -45,8 +45,11 @@ button{font:inherit;color:inherit}
 
 .app{position:relative;height:100%;max-width:620px;margin:0 auto;overflow:hidden;background:var(--paper)}
 .stage{position:absolute;inset:0;cursor:grab;outline:none;touch-action:pan-y;overflow:hidden}
-.page{position:absolute;inset:0;will-change:transform;transform-origin:50% 100%}
-.page.anim{transition:transform .25s ease}
+/* both pages ride on one track: the page we are heading to is already parked just off the
+   edge, so the picture follows the finger at once and no blank gap or tilt shows while turning */
+.track{position:absolute;inset:0;will-change:transform}
+.track.anim{transition:transform .22s cubic-bezier(.22,.61,.36,1)}
+.page{position:absolute;inset:0;background:var(--paper)}
 .stage:focus-visible{outline:3px solid var(--leaf);outline-offset:-3px}
 .frame{position:absolute;inset:0}
 .frame img{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
@@ -120,9 +123,9 @@ button{font:inherit;color:inherit}
 
 <div class="app" id="app" hidden>
   <div class="stage" id="stage" tabindex="0" aria-live="polite">
-    <div class="page" id="pg">
-      <div class="frame" id="frame"></div>
-      <div class="text" id="text"></div>
+    <div class="track" id="track">
+      <div class="page" id="pg"></div>
+      <div class="page" id="pg2" aria-hidden="true" hidden></div>
     </div>
   </div>
   <div class="bar">
@@ -215,12 +218,14 @@ function openWork(id){
   BUILTIN.forEach(src=>{ const im=new Image(); im.src=src; });
   document.title = w.title;
   $("shelf").hidden=true; $("app").hidden=false;
+  resetSlide();
   render();
   if(db) dbGetAll().then(render);
   if(decodeURIComponent(location.hash.slice(1))!==id) location.hash = id;
 }
 function closeWork(){
   if(synth) synth.cancel();
+  resetSlide();
   work=null; PAGES=[]; BUILTIN=[];
   document.title = "おはなしの ほんだな";
   $("app").hidden=true; $("shelf").hidden=false;
@@ -233,11 +238,11 @@ function route(){
 }
 
 /* ---- render ---- */
-function render(){
-  const p = PAGES[page];
-  const imgIndex = ended ? 0 : page;
-  const fr=$("frame"); fr.innerHTML="";
+// paint one page (picture + text card) into el; `live` gives it the ids the rest of the app uses
+function paint(el, st, live){
+  const imgIndex = st.ended ? 0 : st.page;
   const src = urls[imgIndex] || BUILTIN[imgIndex];
+  const fr = document.createElement("div"); fr.className="frame"; if(live) fr.id="frame";
   if(src){
     const bg=new Image(); bg.src=src; bg.alt=""; bg.className="bg"; bg.draggable=false;
     const im=new Image(); im.src=src; im.alt=PAGES[imgIndex].note; im.className="main"; im.draggable=false;
@@ -245,76 +250,118 @@ function render(){
   }
   else fr.innerHTML = `<div class="ph"><svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="36" r="22" fill="var(--tomato)"/><path d="M32 16c-6-6-12-4-14-2 6 0 9 3 14 6 5-3 8-6 14-6-2-2-8-4-14 2z" fill="var(--leaf)"/></svg><b>${imgIndex===0?"ひょうし":imgIndex+"まいめ"}の え</b><small>${PAGES[imgIndex].note}<br>みぎうえの えの ボタンから いれてね</small></div>`;
 
-  const tx=$("text");
-  if(ended){
-    tx.className="text title";
-    tx.innerHTML = `<p>おしまい</p><div class="end" style="margin-top:8px"><button class="big" id="again">もういちど よむ</button></div>`;
-    $("again").onclick = e=>{ e.stopPropagation(); ended=false; page=0; render(); speak(PAGES[0].say); };
+  const tx = document.createElement("div"); if(live) tx.id="text";
+  if(st.ended){
+    tx.className = "text title";
+    tx.innerHTML = `<p>おしまい</p><div class="end" style="margin-top:8px"><button class="big again">もういちど よむ</button></div>`;
   } else {
+    const p = PAGES[st.page];
     tx.className = "text"+(p.title?" title":"")+(textOn?"":" off");
-    const hint = page===0 ? "ゆびで ひだりへ めくってね" : "";
+    const hint = st.page===0 ? "タップか ゆびで めくってね" : "";
     // the cover picture already carries the title, so its card only shows the hint
-    tx.innerHTML = (page===0?"":`<p>${p.text}</p>`)+(hint?`<span class="hint">${hint}</span>`:"");
+    tx.innerHTML = (st.page===0?"":`<p>${p.text}</p>`)+(hint?`<span class="hint">${hint}</span>`:"");
   }
+  el.replaceChildren(fr, tx);
+}
+function render(){
+  if(!work) return;
+  paint(pg, {page, ended}, true);
   $("dots").innerHTML = PAGES.map((_,i)=>`<span class="dot${i===page?" on":""}"></span>`).join("");
   $("back").disabled = page===0 && !ended;
   $("textBtn").setAttribute("aria-pressed", textOn);
   $("sound").setAttribute("aria-pressed", soundOn);
 }
-/* ---- page turning by swipe ---- */
-const pg = $("pg"), stage = $("stage");
+/* ---- page turning: slide with the finger, or tap to go on ---- */
+const pg = $("pg"), pg2 = $("pg2"), track = $("track"), stage = $("stage");
 // the last page depends on the story being read, so work it out each time
 const last = ()=> PAGES.length-1;
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-let sx=0, dx=0, dragging=false, busy=false;
+const SLIDE = 220;                       // ms the page takes to finish sliding on its own
+let sx=0, dx=0, t0=0, timer=0, dragging=false, staged=0, busy=false;
 const canNext = ()=> !ended;
 const canPrev = ()=> ended || page>0;
+// where dir would take us, without changing anything yet
+const after = dir => dir>0
+  ? (page<last() ? {page:page+1, ended:false} : {page, ended:true})
+  : (ended ? {page, ended:false} : {page:page-1, ended:false});
 
+// park the page we are heading to just off the edge, so it slides in together with this one
+function stageNext(dir){
+  if(staged===dir) return;
+  staged = dir;
+  if(!dir){ pg2.hidden=true; pg2.replaceChildren(); return; }
+  paint(pg2, after(dir), false);
+  pg2.style.transform = `translateX(${dir>0?100:-100}%)`;
+  pg2.hidden = false;
+}
 function applyTurn(dir){
   // change state and start the voice right away (inside the finger gesture)
   if(dir>0){ if(page<last()){ page++; speak(PAGES[page].say); } else { ended=true; speak("おしまい。"); } }
   else { if(ended){ ended=false; speak(PAGES[page].say); } else { page--; speak(PAGES[page].say); } }
 }
+// the slide is over: the new page becomes the live one and the track goes back to zero
+function settle(){
+  render();
+  stageNext(0);
+  track.classList.remove("anim");
+  track.style.transform = "";
+  busy=false;
+}
 function turn(dir){
   if(busy) return;
   if(dir>0 ? !canNext() : !canPrev()){ snapBack(); return; }
+  stageNext(dir);
   applyTurn(dir);
-  if(reduce){ pg.style.transform=""; render(); return; }
+  if(reduce){ settle(); return; }
   busy=true;
-  const w = stage.clientWidth;
-  pg.classList.add("anim");
-  pg.style.transform = `translateX(${-dir*w*1.15}px) rotate(${-dir*6}deg)`;
-  setTimeout(()=>{
-    render();
-    pg.classList.remove("anim");
-    pg.style.transform = `translateX(${dir*w}px)`;
-    void pg.offsetWidth;
-    pg.classList.add("anim");
-    pg.style.transform = "";
-    setTimeout(()=>{ busy=false; }, 260);
-  }, 240);
+  void track.offsetWidth;                // let the parked page land before the slide starts
+  track.classList.add("anim");
+  track.style.transform = `translateX(${-dir*stage.clientWidth}px)`;
+  clearTimeout(timer); timer = setTimeout(settle, SLIDE+30);
 }
-function snapBack(){ pg.classList.add("anim"); pg.style.transform=""; }
+function snapBack(){
+  if(busy) return;
+  busy=true;
+  track.classList.add("anim");
+  track.style.transform = "";
+  clearTimeout(timer);
+  timer = setTimeout(()=>{ track.classList.remove("anim"); stageNext(0); busy=false; }, SLIDE+30);
+}
+// leaving the story mid-turn must not leave the track parked off screen
+function resetSlide(){
+  clearTimeout(timer); dragging=false; busy=false; dx=0;
+  track.classList.remove("anim"); track.style.transform=""; stageNext(0);
+}
 
 stage.addEventListener("pointerdown", e=>{
   if(busy || e.target.closest("button")) return;
-  dragging=true; sx=e.clientX; dx=0; pg.classList.remove("anim");
+  dragging=true; sx=e.clientX; dx=0; t0=Date.now(); track.classList.remove("anim");
   try{ stage.setPointerCapture(e.pointerId); }catch(err){}
 });
 stage.addEventListener("pointermove", e=>{
   if(!dragging) return;
   dx = e.clientX - sx;
-  if((dx<0 && !canNext()) || (dx>0 && !canPrev())) dx *= 0.25;   // resist at the ends
-  pg.style.transform = `translateX(${dx}px) rotate(${dx/45}deg)`;
+  const dir = dx<0 ? 1 : dx>0 ? -1 : 0;
+  const open = dir>0 ? canNext() : dir<0 ? canPrev() : false;
+  if(dir && !open) dx *= 0.25;           // resist at the ends
+  stageNext(open ? dir : 0);
+  track.style.transform = `translateX(${dx}px)`;
 });
 function endDrag(){
   if(!dragging) return; dragging=false;
   const th = Math.min(80, stage.clientWidth*0.18);
-  if(dx < -th) turn(1); else if(dx > th) turn(-1); else snapBack();
+  if(dx < -th) turn(1);
+  else if(dx > th) turn(-1);
+  else if(Math.abs(dx) < 16 && Date.now()-t0 < 500) turn(1);   // a tap goes on to the next page (fingers wobble a little)
+  else snapBack();
 }
 stage.addEventListener("pointerup", endDrag);
-stage.addEventListener("pointercancel", endDrag);
+// a cancelled gesture is not a tap, so it only slides back
+stage.addEventListener("pointercancel", ()=>{ if(!dragging) return; dragging=false; snapBack(); });
 stage.addEventListener("keydown", e=>{ if(e.key==="ArrowRight"||e.key===" "||e.key==="Enter"){ e.preventDefault(); turn(1); } if(e.key==="ArrowLeft") turn(-1); });
+// "もういちど よむ" lives inside the page, which is repainted on every turn
+stage.addEventListener("click", e=>{ if(!e.target.closest(".again")) return;
+  ended=false; page=0; render(); speak(PAGES[0].say); });
 $("back").onclick = ()=> turn(-1);
 $("home").onclick = ()=> closeWork();
 
